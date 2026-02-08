@@ -41,5 +41,9 @@ Config.AutoAssignment = {
     MinStaffOnline = 2,
 }
 
+Config.UI = {
+    MaxEvidenceFiles = 3,
+}
+
 Config.BlockAdminReports = false
 Config.MaxOpenReports = 1

@@ -1,34 +1,38 @@
-local Framework = exports['community_bridge']:Framework()
+Bridge = {}
+local BridgeExport = nil
 local HasPermission = false
 
-function Bridge.GetPlayerData()
-    if Framework and Framework.GetPlayerData then
-        return Framework.GetPlayerData()
+CreateThread(function()
+    local attempts = 0
+    while not BridgeExport and attempts < 10 do
+        local ok, result = pcall(function()
+            return exports['community_bridge']:Bridge()
+        end)
+        if ok and result then
+            BridgeExport = result
+        else
+            attempts = attempts + 1
+            Wait(1000)
+        end
     end
-    return nil
-end
 
-function Bridge.IsPlayerLoaded()
-    if Framework and Framework.IsPlayerLoaded then
-        return Framework.IsPlayerLoaded()
+    if not BridgeExport then
+        print('^1[eg_reports] Failed to initialize community_bridge after 10 attempts^7')
+        return
     end
-    return true
+
+    Bridge.RequestPermissionCheck()
+end)
+
+function Bridge.GetPlayerData()
+    if not BridgeExport then return nil end
+    return BridgeExport.Framework.GetPlayerData()
 end
 
 function Bridge.Notify(message, type)
-    if Framework and Framework.Notify then
-        Framework.Notify(message, type or 'info')
-    else
-        exports['community_bridge']:Notify(message, type or 'info')
+    if BridgeExport then
+        BridgeExport.Framework.Notify(message, type or 'info', 5000)
     end
-end
-
-function Bridge.GetCharacterName()
-    if Framework and Framework.GetPlayerName then
-        local name = Framework.GetPlayerName()
-        if name then return name end
-    end
-    return GetPlayerName(PlayerId())
 end
 
 function Bridge.HasPermission()
@@ -46,9 +50,4 @@ end)
 RegisterNetEvent('eg_reports:client:permission_updated', function(hasPerm)
     HasPermission = hasPerm
     TriggerEvent('eg_reports:client:onPermissionChanged', hasPerm)
-end)
-
-CreateThread(function()
-    Wait(1000)
-    Bridge.RequestPermissionCheck()
 end)

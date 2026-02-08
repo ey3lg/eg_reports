@@ -141,14 +141,23 @@ RegisterNUICallback("spectate_reporter", function(reportId, cb)
 end)
 
 RegisterNUICallback("take_screenshot", function(_, cb)
-    exports['screenshot-basic']:requestScreenshot(function(data)
+    local config = lib.callback.await('eg_reports:server:get_upload_config', false)
+    if not config or not config.url or config.url == '' then
+        cb(nil)
+        return
+    end
+
+    exports['screenshot-basic']:requestScreenshotUpload(config.url, config.field, {
+        encoding = 'png'
+    }, function(data)
         if not data then
             cb(nil)
             return
         end
-        local result = lib.callback.await('eg_reports:server:upload_screenshot', false, data)
-        if result and result.success then
-            cb(result.url)
+
+        local response = json.decode(data)
+        if response and response.attachments and response.attachments[1] then
+            cb(response.attachments[1].url)
         else
             cb(nil)
         end

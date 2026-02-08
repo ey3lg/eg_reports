@@ -1,25 +1,42 @@
 Bridge = {}
-local BridgeExport = exports['community_bridge']:Bridge()
+local BridgeExport = nil
 local PlayerPermissions = {}
 
-function Bridge.GetPlayer(source)
-    if BridgeExport and BridgeExport.Framework and BridgeExport.Framework.GetPlayer then
-        return BridgeExport.Framework.GetPlayer(source)
+CreateThread(function()
+    local attempts = 0
+    while not BridgeExport and attempts < 10 do
+        local ok, result = pcall(function()
+            return exports['community_bridge']:Bridge()
+        end)
+        if ok and result then
+            BridgeExport = result
+        else
+            attempts = attempts + 1
+            Wait(1000)
+        end
     end
-    return nil
+
+    if not BridgeExport then
+        print('^1[eg_reports] Failed to initialize community_bridge on server after 10 attempts^7')
+    end
+end)
+
+function Bridge.GetPlayer(source)
+    if not BridgeExport then return nil end
+    return BridgeExport.Framework.GetPlayer(source)
 end
 
 function Bridge.GetPlayerIdentifier(source)
-    local identifiers = GetPlayerIdentifiers(source)
-    for _, id in pairs(identifiers) do
-        if string.find(id, 'license:') then
-            return id
-        end
-    end
-    return identifiers[1]
+    if not BridgeExport then return nil end
+    return BridgeExport.Framework.GetPlayerIdentifier(source)
 end
 
 function Bridge.GetPlayerName(source)
+    if not BridgeExport then return GetPlayerName(source) end
+    local ok, firstName, lastName = pcall(BridgeExport.Framework.GetPlayerName, source)
+    if ok and firstName and lastName then
+        return firstName .. ' ' .. lastName
+    end
     return GetPlayerName(source)
 end
 
@@ -28,9 +45,9 @@ function Bridge.Notify(source, message, type)
 end
 
 function Bridge.CheckPermission(source)
-    if BridgeExport and BridgeExport.Framework and BridgeExport.Framework.GetIsFrameworkAdmin then
-        return BridgeExport.Framework.GetIsFrameworkAdmin(source)
-    end
+    if not BridgeExport then return false end
+    local ok, result = pcall(BridgeExport.Framework.GetIsFrameworkAdmin, source)
+    if ok then return result or false end
     return false
 end
 
@@ -53,6 +70,7 @@ end
 
 function Bridge.GetPlayerCoords(source)
     local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return vector3(0, 0, 0) end
     return GetEntityCoords(ped)
 end
 
@@ -61,11 +79,12 @@ AddEventHandler('playerDropped', function()
 end)
 
 CreateThread(function()
+    Wait(5000)
     while true do
-        Wait(5000)
         for _, playerId in ipairs(GetPlayers()) do
             Bridge.RefreshPermission(tonumber(playerId))
         end
+        Wait(5000)
     end
 end)
 

@@ -190,9 +190,9 @@ function Database.DeleteReport(id, actorIdentifier, actorName)
         MySQL.insert.await(archiveQuery, { actorIdentifier, actorName, id })
     end
     local query = "DELETE FROM eg_reports WHERE id = ?"
-    local result = MySQL.query.await(query, { id })
+    local result = MySQL.update.await(query, { id })
 
-    return result and result.affectedRows > 0
+    return result and result > 0
 end
 
 function Database.AddComment(reportId, authorIdentifier, authorName, content, isInternal, isStaff)

@@ -1,7 +1,7 @@
 ServerConfig = {}
 
 ServerConfig.Screenshot = {
-    UploadURL = 'https://discord.com/api/webhooks/1359995866391380030/B2XpZETygZpItf35dcZAf3vXXyHPrgZ4wy_XUu170VxuIzvlcSfsdxmzR8X6gRx_QhZ0',
+    UploadURL = 'https://discord.com/api/webhooks/1469304931642245153/o806PLDnFU15vOx8kM6xrYsW9a3v-1Sg0p-LG7n4zwkzYT88n0FsU7qwy7fAHJyil1OS',
     FieldName = 'files[]',
 }
 

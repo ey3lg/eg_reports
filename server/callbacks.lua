@@ -1,44 +1,8 @@
-lib.callback.register('eg_reports:server:upload_screenshot', function(source, screenshotData)
-    if not screenshotData or screenshotData == '' then
-        return { success = false, error = 'No screenshot data' }
-    end
-
-    local url = ServerConfig.Screenshot and ServerConfig.Screenshot.UploadURL or ''
-    local field = ServerConfig.Screenshot and ServerConfig.Screenshot.FieldName or 'files[]'
-    
-    if not url or url == '' then
-        return { success = false, error = 'Upload URL not configured' }
-    end
-
-    local uploadSuccess = false
-    local uploadedUrl = nil
-    
-    PerformHttpRequest(url, function(errorCode, resultData, resultHeaders)
-        if errorCode == 200 or errorCode == 204 then
-            local resp = json.decode(resultData)
-            if resp and resp.attachments and resp.attachments[1] then
-                uploadedUrl = resp.attachments[1].url
-                uploadSuccess = true
-            end
-        end
-    end, 'POST', json.encode({
-        content = 'Report Screenshot',
-        [field] = screenshotData
-    }), {
-        ['Content-Type'] = 'application/json'
-    })
-
-    local timeout = 0
-    while not uploadSuccess and timeout < 100 do
-        Wait(50)
-        timeout = timeout + 1
-    end
-
-    if uploadSuccess and uploadedUrl then
-        return { success = true, url = uploadedUrl }
-    else
-        return { success = false, error = 'Upload timeout or failed' }
-    end
+lib.callback.register('eg_reports:server:get_upload_config', function(source)
+    return {
+        url = ServerConfig.Screenshot and ServerConfig.Screenshot.UploadURL or '',
+        field = ServerConfig.Screenshot and ServerConfig.Screenshot.FieldName or 'files[]'
+    }
 end)
 
 lib.callback.register('eg_reports:server:create_report', function(source, data)
