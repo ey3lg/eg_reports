@@ -32,7 +32,11 @@ function UI.Open(page, pageData)
         SendNUIMessage({
             type = "setPermission",
             hasPermission = permData.hasPermission,
-            playerIdentifier = permData.identifier
+            playerIdentifier = permData.identifier,
+            isStaff = permData.isStaff,
+            staffRank = permData.staffRank,
+            onDuty = permData.onDuty,
+            featureConfig = permData.config
         })
 
         UI.firstTime = false

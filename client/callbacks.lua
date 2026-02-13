@@ -31,6 +31,11 @@ RegisterNUICallback("update_status", function(data, cb)
     cb(lib.callback.await('eg_reports:server:update_status', false, data.reportId, data.status))
 end)
 
+RegisterNUICallback("update_priority", function(data, cb)
+    if not data.reportId or not data.priority then cb(false) return end
+    cb(lib.callback.await('eg_reports:server:update_priority', false, data.reportId, data.priority))
+end)
+
 RegisterNUICallback("close_report", function(reportId, cb)
     if not reportId then cb(false) return end
     cb(lib.callback.await('eg_reports:server:close_report', false, reportId))
@@ -141,22 +146,38 @@ RegisterNUICallback("spectate_reporter", function(reportId, cb)
 end)
 
 RegisterNUICallback("take_screenshot", function(_, cb)
-    local config = lib.callback.await('eg_reports:server:get_upload_config', false)
+    local config = Bridge.GetUploadConfig()
+    if not config or not config.url or config.url == '' then
+        config = lib.callback.await('eg_reports:server:get_upload_config', false)
+    end
+
     if not config or not config.url or config.url == '' then
         cb(nil)
         return
     end
 
-    exports['screenshot-basic']:requestScreenshotUpload(config.url, config.field, {
+    local responded = false
+
+    SetTimeout(8000, function()
+        if not responded then
+            responded = true
+            cb(nil)
+        end
+    end)
+
+    exports['screenshot-basic']:requestScreenshotUpload(config.url, config.field or 'files[]', {
         encoding = 'png'
     }, function(data)
+        if responded then return end
+        responded = true
+
         if not data then
             cb(nil)
             return
         end
 
-        local response = json.decode(data)
-        if response and response.attachments and response.attachments[1] then
+        local ok, response = pcall(json.decode, data)
+        if ok and response and response.attachments and response.attachments[1] then
             cb(response.attachments[1].url)
         else
             cb(nil)
@@ -175,4 +196,35 @@ end)
 
 RegisterNUICallback("get_admin_self_stats", function(_, cb)
     cb(lib.callback.await('eg_reports:server:get_admin_self_stats', false))
+end)
+
+RegisterNUICallback("toggle_on_duty", function(_, cb)
+    local result = lib.callback.await('eg_reports:server:toggle_on_duty', false)
+    cb(result)
+end)
+
+RegisterNUICallback("request_player_screenshot", function(reportId, cb)
+    if not reportId then cb(false) return end
+    cb(lib.callback.await('eg_reports:server:request_player_screenshot', false, reportId))
+end)
+
+RegisterNetEvent('eg_reports:client:take_screenshot_for_admin', function(reportId)
+    local config = Bridge.GetUploadConfig()
+    if not config or not config.url or config.url == '' then
+        config = lib.callback.await('eg_reports:server:get_upload_config', false)
+    end
+
+    if not config or not config.url or config.url == '' then return end
+
+    exports['screenshot-basic']:requestScreenshotUpload(config.url, config.field or 'files[]', {
+        encoding = 'png'
+    }, function(data)
+        if not data then return end
+
+        local ok, response = pcall(json.decode, data)
+        if ok and response and response.attachments and response.attachments[1] then
+            local screenshotUrl = response.attachments[1].url
+            lib.callback.await('eg_reports:server:add_admin_screenshot', false, reportId, screenshotUrl)
+        end
+    end)
 end)

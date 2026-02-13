@@ -11,6 +11,10 @@ lib.callback.register('eg_reports:server:create_report', function(source, data)
         return false
     end
 
+    if not Config.PlayerCanSetPriority and not Reports.HasPermission(source) then
+        data.priority = Config.DefaultPriority or 'medium'
+    end
+
     local valid, error = Reports.ValidateReportData(data)
     if not valid then
         Bridge.Notify(source, error, 'error')
@@ -68,6 +72,8 @@ lib.callback.register('eg_reports:server:create_report', function(source, data)
         end
 
         Bridge.Notify(source, _('report_created'), 'success')
+        Reports.NotifyAllStaff(_('notify_new_report') .. ' #' .. reportId, 'info', source)
+        Reports.LogAction(source, 'report_created', 'Report #' .. reportId .. ' created by ' .. name)
         return reportId
     end
 
@@ -92,9 +98,24 @@ lib.callback.register('eg_reports:server:get_report_details', function(source, r
         return nil
     end
 
+    local comments = Database.GetComments(reportId, Reports.CanViewInternalComments(source))
+
+    for i = 1, #comments do
+        local comment = comments[i]
+        if comment.is_staff == 1 or comment.is_staff == true then
+            local commentSource = Reports.GetPlayerSourceByIdentifier(comment.author_identifier)
+            if commentSource then
+                local rank = Bridge.GetPlayerStaffRank(commentSource)
+                if rank then
+                    comment.staff_rank = rank
+                end
+            end
+        end
+    end
+
     return {
         report = report,
-        comments = Database.GetComments(reportId, Reports.CanViewInternalComments(source)),
+        comments = comments,
         history = Database.GetHistory(reportId)
     }
 end)
@@ -112,6 +133,15 @@ lib.callback.register('eg_reports:server:claim_report', function(source, reportI
     if success then
         Webhooks.Send('Claimed', { id = reportId, assigned_to_name = name })
         Bridge.Notify(source, _('report_claimed'), 'success')
+        Reports.LogAction(source, 'report_claimed', 'Report #' .. reportId .. ' claimed by ' .. name)
+
+        local report = Database.GetReportById(reportId)
+        if report then
+            local reporterSource = Reports.GetPlayerSourceByIdentifier(report.reporter_identifier)
+            if reporterSource then
+                Bridge.Notify(reporterSource, _('notify_report_claimed') .. ' #' .. reportId, 'info')
+            end
+        end
     else
         Bridge.Notify(source, _('report_claim_failed'), 'error')
     end
@@ -127,7 +157,26 @@ lib.callback.register('eg_reports:server:update_status', function(source, report
 
     local identifier, name = Reports.GetPlayerInfo(source)
     local success = Database.UpdateReport(reportId, { status = newStatus }, identifier, name)
-    if success then Bridge.Notify(source, _('report_updated'), 'success') end
+    if success then
+        Bridge.Notify(source, _('report_updated'), 'success')
+        Reports.LogAction(source, 'report_updated', 'Report #' .. reportId .. ' status changed to ' .. newStatus .. ' by ' .. name)
+    end
+    return success
+end)
+
+lib.callback.register('eg_reports:server:update_priority', function(source, reportId, newPriority)
+    if not Reports.HasPermission(source) then
+        Bridge.Notify(source, _('no_permission'), 'error')
+        return false
+    end
+    if not reportId or not newPriority then return false end
+
+    local identifier, name = Reports.GetPlayerInfo(source)
+    local success = Database.UpdateReport(reportId, { priority = newPriority }, identifier, name)
+    if success then
+        Bridge.Notify(source, _('report_updated') or 'Report updated', 'success')
+        Reports.LogAction(source, 'priority_changed', 'Report #' .. reportId .. ' priority changed to ' .. newPriority .. ' by ' .. name)
+    end
     return success
 end)
 
@@ -144,6 +193,15 @@ lib.callback.register('eg_reports:server:close_report', function(source, reportI
     if success then
         Webhooks.Send('Closed', { id = reportId, closed_by_name = name })
         Bridge.Notify(source, _('report_closed'), 'success')
+        Reports.LogAction(source, 'report_closed', 'Report #' .. reportId .. ' closed by ' .. name)
+
+        local report = Database.GetReportById(reportId)
+        if report then
+            local reporterSource = Reports.GetPlayerSourceByIdentifier(report.reporter_identifier)
+            if reporterSource then
+                Bridge.Notify(reporterSource, _('notify_report_resolved') .. ' #' .. reportId, 'success')
+            end
+        end
     else
         Bridge.Notify(source, _('report_close_failed'), 'error')
     end
@@ -181,13 +239,39 @@ lib.callback.register('eg_reports:server:add_comment', function(source, reportId
     local isStaff = Reports.HasPermission(source)
     if isInternal and not isStaff then isInternal = false end
 
+    local staffRank = nil
+    if isStaff then
+        staffRank = Bridge.GetPlayerStaffRank(source)
+    end
+
     local success = Database.AddComment(reportId, identifier, name, content, isInternal, isStaff)
 
-    if success and isStaff and not isInternal then
-        local reporterSource = Reports.GetPlayerSourceByIdentifier(report.reporter_identifier)
-        if reporterSource and reporterSource ~= source then
-            Bridge.Notify(reporterSource, 'Staff replied to your report #' .. reportId, 'info')
+    if success then
+        if isStaff and not isInternal then
+            local reporterSource = Reports.GetPlayerSourceByIdentifier(report.reporter_identifier)
+            if reporterSource and reporterSource ~= source then
+                Bridge.Notify(reporterSource, _('notify_new_message') .. ' #' .. reportId, 'info')
+            end
+            if report.assigned_to and report.assigned_to ~= identifier then
+                local assignedSource = Reports.GetPlayerSourceByIdentifier(report.assigned_to)
+                if assignedSource and assignedSource ~= source then
+                    Bridge.Notify(assignedSource, _('notify_new_message') .. ' #' .. reportId, 'info')
+                end
+            end
         end
+
+        if not isStaff then
+            if report.assigned_to then
+                local assignedSource = Reports.GetPlayerSourceByIdentifier(report.assigned_to)
+                if assignedSource and assignedSource ~= source then
+                    Bridge.Notify(assignedSource, _('notify_player_message') .. ' #' .. reportId, 'info')
+                end
+            else
+                Reports.NotifyAllStaff(_('notify_player_message') .. ' #' .. reportId, 'info', source)
+            end
+        end
+
+        Reports.LogAction(source, 'comment_added', 'Comment on report #' .. reportId .. ' by ' .. name)
     end
 
     Bridge.Notify(source, success and _('comment_added') or _('comment_failed'), success and 'success' or 'error')
@@ -207,6 +291,7 @@ lib.callback.register('eg_reports:server:delete_report', function(source, report
     if success then
         Webhooks.Send('Deleted', { id = reportId, deleted_by_name = name })
         Bridge.Notify(source, _('report_deleted'), 'success')
+        Reports.LogAction(source, 'report_deleted', 'Report #' .. reportId .. ' deleted by ' .. name)
     else
         Bridge.Notify(source, _('report_delete_failed'), 'error')
     end
@@ -251,9 +336,24 @@ lib.callback.register('eg_reports:server:goto_location', function(source, report
 end)
 
 lib.callback.register('eg_reports:server:has_permission', function(source)
+    local hasPerm = Reports.HasPermission(source)
+    local staffRank = nil
+    if hasPerm or Bridge.IsStaff(source) then
+        staffRank = Bridge.GetPlayerStaffRank(source)
+    end
+
     return {
-        hasPermission = Reports.HasPermission(source),
-        identifier = Bridge.GetPlayerIdentifier(source)
+        hasPermission = hasPerm,
+        identifier = Bridge.GetPlayerIdentifier(source),
+        isStaff = Bridge.IsStaff(source),
+        staffRank = staffRank,
+        onDuty = Bridge.IsOnDuty(source),
+        config = {
+            playerCanSetPriority = Config.PlayerCanSetPriority,
+            enableRatings = Config.EnableRatings,
+            staffDutyEnabled = Config.StaffDuty and Config.StaffDuty.Enabled or false,
+            staffRanks = Config.StaffRanks,
+        }
     }
 end)
 
@@ -267,6 +367,11 @@ lib.callback.register('eg_reports:server:get_reporter_source', function(source, 
 end)
 
 lib.callback.register('eg_reports:server:rate_report', function(source, reportId, rating)
+    if not Config.EnableRatings then
+        Bridge.Notify(source, 'Ratings are disabled', 'error')
+        return false
+    end
+
     if not reportId or not rating then return false end
 
     local report = Database.GetReportById(reportId)
@@ -278,11 +383,17 @@ lib.callback.register('eg_reports:server:rate_report', function(source, reportId
         return false
     end
 
+    if report.rating then
+        Bridge.Notify(source, 'You have already rated this report', 'error')
+        return false
+    end
+
     if rating < 1 or rating > 5 then return false end
 
     local success = Database.RateReport(reportId, rating)
     if success then
         Bridge.Notify(source, _('rating_submitted') or 'Rating submitted', 'success')
+        Reports.LogAction(source, 'report_rated', 'Report #' .. reportId .. ' rated ' .. rating .. '/5')
     end
     return success
 end)
@@ -317,4 +428,67 @@ lib.callback.register('eg_reports:server:get_admin_self_stats', function(source)
     local identifier = Reports.GetPlayerInfo(source)
     if not identifier then return nil end
     return Database.GetAdminSelfStats(identifier)
+end)
+
+lib.callback.register('eg_reports:server:toggle_on_duty', function(source)
+    if not Bridge.IsStaff(source) then
+        Bridge.Notify(source, _('no_permission'), 'error')
+        return nil
+    end
+
+    local newState = Bridge.ToggleOnDuty(source)
+    local _, name = Reports.GetPlayerInfo(source)
+
+    if newState then
+        Bridge.Notify(source, _('now_on_duty') or 'You are now on duty', 'success')
+        Reports.LogAction(source, 'staff_on_duty', name .. ' went on duty')
+    else
+        Bridge.Notify(source, _('now_off_duty') or 'You are now off duty', 'info')
+        Reports.LogAction(source, 'staff_off_duty', name .. ' went off duty')
+    end
+
+    return newState
+end)
+
+lib.callback.register('eg_reports:server:request_player_screenshot', function(source, reportId)
+    if not Reports.HasPermission(source) then
+        Bridge.Notify(source, _('no_permission'), 'error')
+        return false
+    end
+    if not reportId then return false end
+
+    local report = Database.GetReportById(reportId)
+    if not report then
+        Bridge.Notify(source, _('report_not_found'), 'error')
+        return false
+    end
+
+    local reporterSource = Reports.GetPlayerSourceByIdentifier(report.reporter_identifier)
+    if not reporterSource then
+        Bridge.Notify(source, _('player_not_online'), 'error')
+        return false
+    end
+
+    TriggerClientEvent('eg_reports:client:take_screenshot_for_admin', reporterSource, reportId)
+    Bridge.Notify(source, _('screenshot_requested') or 'Screenshot requested from player', 'info')
+    Reports.LogAction(source, 'screenshot_requested', 'Screenshot requested for report #' .. reportId)
+    return true
+end)
+
+lib.callback.register('eg_reports:server:add_admin_screenshot', function(source, reportId, screenshotUrl)
+    if not reportId or not screenshotUrl then return false end
+    local success = Database.UpdateReportScreenshot(reportId, screenshotUrl)
+    if success then
+        Database.AddComment(reportId, 'system', 'Admin Screenshot', screenshotUrl, false, true)
+        Reports.NotifyAllStaff('Screenshot added to report #' .. reportId, 'info')
+
+        local report = Database.GetReportById(reportId)
+        if report then
+            local reporterSource = Reports.GetPlayerSourceByIdentifier(report.reporter_identifier)
+            if reporterSource then
+                Bridge.Notify(reporterSource, 'A screenshot was taken for report #' .. reportId, 'info')
+            end
+        end
+    end
+    return success
 end)

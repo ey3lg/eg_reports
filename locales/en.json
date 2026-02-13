@@ -16,6 +16,15 @@
     "player_not_online": "Player is not online",
     "location_not_available": "Location not available",
     "message_sent": "Message sent to reporter successfully",
+    "rating_submitted": "Rating submitted",
+    "now_on_duty": "You are now on duty",
+    "now_off_duty": "You are now off duty",
+    "screenshot_requested": "Screenshot requested from player",
+    "notify_new_report": "New report created",
+    "notify_new_message": "New message in report",
+    "notify_player_message": "New player message in report",
+    "notify_report_claimed": "Your report has been claimed",
+    "notify_report_resolved": "Your report has been resolved",
     "header": {
         "my_reports": "My Reports",
         "create_report": "Create Report",
@@ -77,6 +86,16 @@
         "live": "Live",
         "no_messages": "No messages yet. Start the conversation!",
         "type_message": "Type your message...",
-        "send": "Send"
+        "send": "Send",
+        "taking_screenshot": "Taking screenshot...",
+        "submitting_report": "Submitting report...",
+        "admin_replied": "Admin Replied",
+        "awaiting": "Awaiting",
+        "on_duty": "On Duty",
+        "off_duty": "Off Duty",
+        "request_screenshot": "Request Screenshot",
+        "rate_experience": "Rate Your Experience",
+        "rate_question": "How would you rate the staff's help?",
+        "submit_rating": "Submit Rating"
     }
 }
